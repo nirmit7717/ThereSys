@@ -43,3 +43,10 @@ class HandTracker:
                 })
 
         return hands_data
+
+    def close(self):
+        """Release MediaPipe resources."""
+        try:
+            self.hands.close()
+        except Exception:
+            pass
