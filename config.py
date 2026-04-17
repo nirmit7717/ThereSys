@@ -57,6 +57,7 @@ GESTURE_CONFIDENCE_THRESHOLD = 0.6
 # === MIDI ===
 MIDI_ENABLED = True
 MIDI_OUTPUT_NAME = "ThereSyn"
+MIDI_PITCH_BEND_RANGE_SEMITONES = 2  # pitch bend range in semitones (±)
 
 # === UI ===
 UI_FONT_NAME = "Segoe UI"

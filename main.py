@@ -64,7 +64,7 @@ def main():
     # === Engine ===
     audio_engine = AudioEngine()
     midi_output = MIDIOutput()
-    latency_profiler = LatencyProfiler(report_interval=2.0) if LATENCY_LOG_ENABLED else None
+    latency_profiler = LatencyProfiler(report_interval=LATENCY_LOG_INTERVAL) if LATENCY_LOG_ENABLED else None
 
     # === UI ===
     theremin_ui = ThereminUI(FRAME_WIDTH, FRAME_HEIGHT)
@@ -75,6 +75,9 @@ def main():
     waveform_cycle = ["sine", "sawtooth", "square", "triangle"]
     waveform_idx = 0
     system_debouncer = Debouncer(debounce_time=0.5)
+
+    # ML-driven octave offset (in semitones)
+    octave_offset = 0
 
     log.info("ThereSyn started. Press ESC to quit.")
     log.info("Controls: Pinch to engage | Move hand for pitch/vol | W = cycle waveform | ESC = quit")
@@ -128,10 +131,26 @@ def main():
         ml_result = None
         if gesture_classifier and smoothed:
             ml_result = gesture_classifier.classify(smoothed)
-            if ml_result and ml_result["gesture"] == "stop":
+            if ml_result:
+                g = ml_result.get("gesture")
+                conf = ml_result.get("confidence", 0.0)
                 # ML override: force disengage
-                for pid in pinch_state:
-                    pinch_state[pid]["pinching"] = False
+                if g == "stop" and conf >= gesture_classifier.confidence_threshold:
+                    for pid in pinch_state:
+                        pinch_state[pid]["pinching"] = False
+                # ML auto-engage (if configured and confident)
+                elif g == "theremin_engage" and conf >= gesture_classifier.confidence_threshold:
+                    for pid in pinch_state:
+                        pinch_state[pid]["pinching"] = True
+                # ML octave controls (debounced)
+                elif g in ("octave_up", "octave_down") and conf >= gesture_classifier.confidence_threshold:
+                    if system_debouncer.can_trigger(g):
+                        if g == "octave_up":
+                            octave_offset += 12
+                            log.info("ML: octave up")
+                        else:
+                            octave_offset -= 12
+                            log.info("ML: octave down")
 
         # --- Theremin processing ---
         theremin_data = None
@@ -149,9 +168,12 @@ def main():
                 cx, cy = pinch_state[0]["center"]
                 pinch_pos = (int(cx * FRAME_WIDTH), int(cy * FRAME_HEIGHT))
 
+            # Apply octave offset (from ML) to pitch
+            adj_pitch = theremin_data["pitch"] * (2 ** (octave_offset / 12.0))
+
             # Send to audio + MIDI
             audio_engine.update_theremin(
-                frequency=theremin_data["pitch"],
+                frequency=adj_pitch,
                 volume=theremin_data["volume"],
                 filter_cutoff=theremin_data["filter_cutoff"],
                 waveform=current_waveform,
@@ -159,14 +181,14 @@ def main():
 
             if engaged:
                 audio_engine.theremin_engage()
-                if midi_output.enabled:
-                    midi_note = midi_output.freq_to_midi(theremin_data["pitch"])
-                    bend = midi_output.freq_to_pitch_bend(theremin_data["pitch"], midi_note)
+                if midi_output and midi_output.enabled:
+                    midi_note = midi_output.freq_to_midi(adj_pitch)
+                    bend = midi_output.freq_to_pitch_bend(adj_pitch, midi_note)
                     midi_output.pitch_bend(bend)
                     midi_output.control_change(7, int(theremin_data["volume"] * 127))
             else:
                 audio_engine.theremin_disengage()
-                if midi_output.enabled:
+                if midi_output and midi_output.enabled:
                     midi_output.pitch_bend(8192)
 
         # --- Profiler: gesture + audio done ---

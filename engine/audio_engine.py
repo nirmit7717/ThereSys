@@ -10,8 +10,6 @@ Focused on continuous theremin synthesis:
 
 import threading
 import queue
-import numpy as np
-import pygame
 from dsp.oscillator import Oscillator
 from dsp.envelope import ADSREnvelope
 from dsp.filter import LowpassFilter
@@ -22,16 +20,51 @@ from config import (
 
 
 class AudioEngine:
-    """Threaded audio engine for continuous theremin synthesis."""
+    """Threaded audio engine for continuous theremin synthesis.
 
-    def __init__(self):
-        pygame.mixer.pre_init(SAMPLE_RATE, -16, CHANNELS, BUFFER_SIZE)
-        pygame.mixer.init()
-        pygame.mixer.set_num_channels(32)
+    Supports dependency injection for headless testing via optional parameters:
+      oscillator, envelope, filter, enable_audio
+    """
 
-        self.oscillator = Oscillator(SAMPLE_RATE)
-        self.envelope = ADSREnvelope(attack=0.05, decay=0.1, sustain_level=0.8, release=0.3)
-        self.filter = LowpassFilter(SAMPLE_RATE)
+    def __init__(self, oscillator=None, envelope=None, filter=None, enable_audio: bool = True):
+        self._enable_audio = enable_audio
+
+        # Initialize pygame mixer only if audio enabled and mixer not already initialized by main
+        if self._enable_audio:
+            try:
+                import pygame as _pygame
+                if not _pygame.mixer.get_init():
+                    _pygame.mixer.init()
+                    _pygame.mixer.set_num_channels(32)
+                self._pygame = _pygame
+            except Exception as e:
+                print(f"[Audio] Warning: mixer init failed or pygame unavailable: {e}")
+                self._enable_audio = False
+                self._pygame = None
+        else:
+            self._pygame = None
+
+        # Allow injected DSP components for tests to avoid heavy deps
+        if oscillator is not None:
+            self.oscillator = oscillator
+        elif self._enable_audio:
+            self.oscillator = Oscillator(SAMPLE_RATE)
+        else:
+            self.oscillator = None
+
+        if envelope is not None:
+            self.envelope = envelope
+        elif self._enable_audio:
+            self.envelope = ADSREnvelope(attack=0.05, decay=0.1, sustain_level=0.8, release=0.3)
+        else:
+            self.envelope = None
+
+        if filter is not None:
+            self.filter = filter
+        elif self._enable_audio:
+            self.filter = LowpassFilter(SAMPLE_RATE)
+        else:
+            self.filter = None
 
         # Theremin continuous state
         self._engaged = False
@@ -63,17 +96,20 @@ class AudioEngine:
             if "waveform" in cmd:
                 self._waveform = cmd["waveform"]
 
-            # Synthesize a short chunk and play
-            if self._engaged and self._vol > 0.01:
-                chunk_duration = 0.1  # 100ms chunks for smooth updates
-                raw = self.oscillator.generate(self._waveform, self._freq, chunk_duration, self._vol)
-                shaped = self.envelope.apply(raw)
-                # Apply filter
-                shaped = self.filter.apply(shaped, self._filter_cutoff)
-                stereo = np.column_stack((shaped, shaped))
-                int16 = (stereo * 32767).astype(np.int16)
-                sound = pygame.sndarray.make_sound(int16)
-                sound.play()
+            # If audio playback is disabled (headless tests), skip synthesis but keep state updated
+            if self._enable_audio and self._engaged and self._vol > 0.01 and self.oscillator is not None:
+                try:
+                    import numpy as _np
+                    sound_data = self.oscillator.generate(self._waveform, self._freq, 0.1, self._vol)
+                    shaped = self.envelope.apply(sound_data)
+                    shaped = self.filter.apply(shaped, self._filter_cutoff)
+                    stereo = _np.column_stack((shaped, shaped))
+                    int16 = (stereo * 32767).astype(_np.int16)
+                    sound = self._pygame.sndarray.make_sound(int16)
+                    sound.play()
+                except Exception as e:
+                    # Log and continue; playback failure shouldn't crash the audio thread
+                    print(f"[Audio] Playback error: {e}")
 
         elif action == "theremin_engage":
             self._engaged = True
@@ -106,6 +142,6 @@ class AudioEngine:
         self._queue.put({"action": "set_waveform", "waveform": waveform})
 
     def quit(self):
+        """Signal audio thread to stop and wait briefly. Do not call pygame.quit() here — main() owns pygame lifecycle."""
         self._queue.put(None)
         self._thread.join(timeout=1.0)
-        pygame.quit()
