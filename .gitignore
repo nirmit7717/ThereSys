@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+assets/*.onnx
+assets/*.npz
+*.npz.labels.json
+.env
