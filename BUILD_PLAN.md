@@ -71,12 +71,20 @@
 | Training script | Collaborator | ✅ Done | `train_model.py --collect/--train/--verify` |
 | Fix floating-point test boundary | Collaborator | ✅ Done | `99.9` instead of `100.0` |
 
+### ✅ Done by Nirmit (this session)
+
+| Task | Owner | Status | Notes |
+|------|-------|--------|-------|
+| Fix train_model.py drawing utils bug | Nirmit | ✅ Done | Replaced np.solutions.* with mediapipe and added import guard |
+| Make sklearn-safe training path | Nirmit | ✅ Done | GestureClassifier.train skips when sklearn missing; tests pass headlessly |
+| UI FPS counter hookup | Nirmit | ✅ Done | main passes clock.get_fps() to UI |
+
 ### ❌ Remaining (Nirmit's Part)
 
 | Task | Owner | Status | Notes |
 |------|-------|--------|-------|
 | End-to-end testing with real camera | Nirmit | ❌ Todo | Run on real hardware, verify audio output |
-| Collect real gesture samples | Nirmit | ❌ Todo | `python train_model.py --collect`, press 1-7 to label gestures, SPACE to record |
+| Collect real gesture samples | Nirmit | ❌ Todo | `python train_model.py --collect`, press 1-7 to set label, SPACE to record |
 | Train model with real data | Both | ❌ Todo | After collecting: `python train_model.py --train` |
 | Demo video recording | Nirmit | ❌ Todo | Screen record working prototype |
 | README + GIF finalization | Nirmit | ❌ Todo | Add demo GIF, screenshots, architecture diagram |

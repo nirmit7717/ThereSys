@@ -217,7 +217,7 @@ def main():
 
         # Theremin UI overlay
         if theremin_data:
-            theremin_ui.draw(frame_surf, theremin_data, pinch_pos)
+            theremin_ui.draw(frame_surf, theremin_data, pinch_pos, fps=clock.get_fps())
 
         # Waveform visualizer (bottom of screen)
         visualizer_y = FRAME_HEIGHT - 60

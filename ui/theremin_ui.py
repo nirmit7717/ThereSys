@@ -17,7 +17,7 @@ class ThereminUI:
         self.font_medium = pygame.font.SysFont("Segoe UI", 16, bold=True)
         self.font_large = pygame.font.SysFont("Segoe UI", 28, bold=True)
 
-    def draw(self, surface, theremin_data: dict, pinch_pos=None):
+    def draw(self, surface, theremin_data: dict, pinch_pos=None, fps: float = None):
         """
         Draw theremode UI overlay.
 
@@ -72,3 +72,8 @@ class ThereminUI:
             t = pygame.time.get_ticks() / 1000.0
             radius = 20 + int(5 * abs((t % 1.0) - 0.5))
             pygame.draw.circle(surface, (0, 255, 150, 100), (px, py), radius, 2)
+
+        # --- FPS display ---
+        if fps is not None:
+            fps_lbl = self.font_medium.render(f"FPS: {int(fps)}", True, (200, 200, 200))
+            surface.blit(fps_lbl, (10, 10))

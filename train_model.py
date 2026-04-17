@@ -170,6 +170,7 @@ def verify(model_path: str = GESTURE_MODEL_PATH):
 def collect(samples_path: str = "assets/samples.npz"):
     """Interactive data collection mode with webcam."""
     import cv2
+    import mediapipe as mp
     from vision.camera import Camera
     from vision.hand_tracker import HandTracker
     from utils.smoothing import LandmarkSmoother
@@ -198,9 +199,10 @@ def collect(samples_path: str = "assets/samples.npz"):
         # Draw landmarks
         for hand in hands:
             if "raw_landmarks" in hand:
-                np.solutions.drawing_utils.draw_landmarks(
+                # Use MediaPipe drawing utilities
+                mp.solutions.drawing_utils.draw_landmarks(
                     frame, hand["raw_landmarks"],
-                    np.solutions.hands.HAND_CONNECTIONS,
+                    mp.solutions.hands.HAND_CONNECTIONS,
                 )
 
         # Status overlay
