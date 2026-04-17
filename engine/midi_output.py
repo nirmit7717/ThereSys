@@ -1,0 +1,128 @@
+"""
+engine/midi_output.py — MIDI stream output for DAW integration.
+
+Sends note_on, note_off, pitch_bend, and control_change messages
+via rtmidi to any connected MIDI port or virtual MIDI device.
+"""
+
+from config import MIDI_OUTPUT_NAME, MIDI_ENABLED
+
+
+class MIDIOutput:
+    """MIDI output handler using rtmidi."""
+
+    def __init__(self, enabled: bool = MIDI_ENABLED, output_name: str = MIDI_OUTPUT_NAME):
+        self.enabled = enabled
+        self._output = None
+
+        if self.enabled:
+            try:
+                import rtmidi
+                self._midi_out = rtmidi.MidiOut()
+                self._midi_out.open_virtual_port(output_name)
+                self._output = self._midi_out
+                print(f"[MIDI] Virtual port '{output_name}' opened.")
+            except Exception as e:
+                print(f"[MIDI] Failed to open virtual port: {e}")
+                self.enabled = False
+
+    def note_on(self, note: int, velocity: int = 127, channel: int = 0):
+        """Send MIDI note_on message."""
+        if not self.enabled:
+            return
+        msg = [0x90 | (channel & 0x0F), note & 0x7F, velocity & 0x7F]
+        self._output.send_message(msg)
+
+    def note_off(self, note: int, velocity: int = 0, channel: int = 0):
+        """Send MIDI note_off message."""
+        if not self.enabled:
+            return
+        msg = [0x80 | (channel & 0x0F), note & 0x7F, velocity & 0x7F]
+        self._output.send_message(msg)
+
+    def pitch_bend(self, value: int, channel: int = 0):
+        """
+        Send MIDI pitch_bend message.
+
+        Args:
+            value: 0-16383, 8192 = center (no bend).
+            channel: MIDI channel.
+        """
+        if not self.enabled:
+            return
+        lsb = value & 0x7F
+        msb = (value >> 7) & 0x7F
+        msg = [0xE0 | (channel & 0x0F), lsb, msb]
+        self._output.send_message(msg)
+
+    def control_change(self, cc: int, value: int, channel: int = 0):
+        """Send MIDI CC message."""
+        if not self.enabled:
+            return
+        msg = [0xB0 | (channel & 0x0F), cc & 0x7F, value & 0x7F]
+        self._output.send_message(msg)
+
+    def set_instrument(self, program: int, channel: int = 0):
+        """Send MIDI program change (instrument selection)."""
+        if not self.enabled:
+            return
+        msg = [0xC0 | (channel & 0x0F), program & 0x7F]
+        self._output.send_message(msg)
+
+    def close(self):
+        """Close MIDI port."""
+        if self._output:
+            self._output.close_port()
+            del self._output
+
+    @staticmethod
+    def note_name_to_midi(note_name: str) -> int:
+        """Convert note name like 'C4' to MIDI note number."""
+        note_map = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6,
+                     "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
+
+        if note_name[1] == "#":
+            name_part = note_name[:2]
+            octave_part = note_name[2:]
+        else:
+            name_part = note_name[0]
+            octave_part = note_name[1:]
+
+        if name_part not in note_map:
+            return 60  # default C4
+
+        try:
+            octave = int(octave_part)
+        except ValueError:
+            return 60
+
+        return 12 * (octave + 1) + note_map[name_part]
+
+    @staticmethod
+    def freq_to_midi(freq: float) -> int:
+        """Convert frequency (Hz) to nearest MIDI note number."""
+        if freq <= 0:
+            return 60
+        return int(round(12 * (2.0 ** ((freq - 440.0) / 12.0)) + 69))
+
+    @staticmethod
+    def freq_to_pitch_bend(freq: float, base_note: int) -> int:
+        """
+        Convert frequency to MIDI pitch_bend value for microtonal control.
+
+        Args:
+            freq: Target frequency in Hz.
+            base_note: Integer MIDI note to bend from.
+
+        Returns:
+            Pitch bend value 0-16383 (8192 = center).
+        """
+        if freq <= 0 or base_note < 0 or base_note > 127:
+            return 8192
+        base_freq = 440.0 * (2.0 ** ((base_note - 69) / 12.0))
+        if base_freq <= 0:
+            return 8192
+        cents = 1200 * (2.0 ** (freq / base_freq) - 1)
+        # Map cents to pitch_bend range: ±2 semitones = ±200 cents → 0-16383
+        bend = int(8192 + (cents / 200.0) * 8191)
+        return max(0, min(16383, bend))
