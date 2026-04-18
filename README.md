@@ -5,6 +5,9 @@ ThereSyn is a real-time gesture-based theremin that uses your hands to control p
 
 Built with MediaPipe, Pygame, NumPy, and real-time DSP.
 
+<!-- TODO: Add demo GIF here when ready -->
+<!-- ![ThereSyn Demo](assets/demo.gif) -->
+
 ## ✨ Features
 
 - **🔮 Continuous Pitch Control** — Move your hand left/right to glide across frequencies (C3–C6) with exponential musical mapping
@@ -35,11 +38,28 @@ Built with MediaPipe, Pygame, NumPy, and real-time DSP.
                     [Audio Output + MIDI + Visualizer]
 ```
 
+## 🛠️ Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Hand Tracking | MediaPipe Hands (21 landmarks, real-time) |
+| Audio Synthesis | Pygame mixer + NumPy DSP (band-limited oscillators) |
+| ML Gesture Recognition | sklearn MLP → ONNX Runtime inference |
+| MIDI Output | mido (pitch_bend + CC to any DAW) |
+| Smoothing | Exponential Moving Average (EMA) on landmarks |
+| UI | Pygame overlay (frequency/volume bars, waveform visualizer) |
+| Latency Profiling | Per-stage timing with avg/max/p95 reporting |
+
 ## 🚀 Quick Start
 
 ```bash
 pip install -r requirements.txt
 python main.py
+```
+
+**No webcam?** Run the headless smoke test:
+```bash
+python headless_smoke.py
 ```
 
 ## 🎮 Controls
@@ -106,6 +126,34 @@ ThereSyn/
 | Gesture classification | < 5 ms |
 | Audio synthesis | < 10 ms |
 | **End-to-end** | **< 50 ms** |
+
+## 📖 Pipeline Detail
+
+### Vision
+- **Camera** (`vision/camera.py`) — OpenCV capture with disconnect tolerance (30-frame grace)
+- **HandTracker** (`vision/hand_tracker.py`) — MediaPipe Hands, up to 2 hands, confidence-tunable
+- **LandmarkSmoother** (`utils/smoothing.py`) — EMA filter (α=0.35) to reduce jitter
+
+### Gesture
+- **PinchDetector** (`gesture/pinch_detector.py`) — Euclidean distance between thumb tip (4) and index tip (8) → engage/disengage with edge detection
+- **ThereminMapper** (`gesture/theremin_mapper.py`) — Exponential frequency mapping (C3–C6), linear volume, finger spread → filter cutoff
+- **GestureClassifier** (`gesture/gesture_classifier.py`) — ONNX Runtime inference, 63-dim input (21 landmarks × 3 coords), 7 gesture classes, confidence thresholding
+
+### DSP
+- **Oscillator** (`dsp/oscillator.py`) — Band-limited saw/square/tri via additive synthesis, Nyquist-safe
+- **Envelope** (`dsp/envelope.py`) — ADSR with configurable attack/decay/sustain/release
+- **Filter** (`dsp/filter.py`) — State-variable lowpass for timbre control
+
+### Audio Engine
+- **AudioEngine** (`engine/audio_engine.py`) — Threaded synthesis loop, lock-free parameter updates, headless mode for testing
+- **MIDIOutput** (`engine/midi_output.py`) — Real-time pitch_bend + CC7 (volume), configurable bend range
+- **LatencyProfiler** (`engine/latency_profiler.py`) — Per-frame timing: vision → gesture → audio queue stages
+
+### ML Training
+- **train_model.py** — Three modes:
+  - `--collect` — Interactive webcam sampler (key press to label, SPACE to record)
+  - `--train` — sklearn MLPClassifier → ONNX export with embedded labels
+  - `--verify` — Load ONNX model, run dummy inference, confirm output
 
 ## 📚 Related Work
 
