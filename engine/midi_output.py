@@ -5,26 +5,55 @@ Sends note_on, note_off, pitch_bend, and control_change messages
 via rtmidi to any connected MIDI port or virtual MIDI device.
 """
 
+import sys
 from config import MIDI_OUTPUT_NAME, MIDI_ENABLED
 
 
 class MIDIOutput:
-    """MIDI output handler using rtmidi."""
+    """MIDI output handler using rtmidi (python-rtmidi)."""
 
     def __init__(self, enabled: bool = MIDI_ENABLED, output_name: str = MIDI_OUTPUT_NAME):
         self.enabled = enabled
         self._output = None
+        self._api = None  # Track which API style we're using
 
         if self.enabled:
             try:
                 import rtmidi
                 self._midi_out = rtmidi.MidiOut()
-                self._midi_out.open_virtual_port(output_name)
+                self._open_port(self._midi_out, output_name)
                 self._output = self._midi_out
-                print(f"[MIDI] Virtual port '{output_name}' opened.")
-            except Exception as e:
-                print(f"[MIDI] Failed to open virtual port: {e}")
+                self._api = "python-rtmidi"
+            except ImportError:
+                print("[MIDI] python-rtmidi not installed. MIDI disabled.")
                 self.enabled = False
+            except Exception as e:
+                print(f"[MIDI] Failed to open MIDI output: {e}")
+                self.enabled = False
+
+    @staticmethod
+    def _open_port(midi_out, name: str):
+        """Open a MIDI port. Tries virtual port first (macOS/Linux),
+        falls back to listing and opening an available port (Windows)."""
+        if sys.platform == "win32":
+            # Windows doesn't support virtual ports — open first available output port
+            ports = midi_out.get_ports()
+            if ports:
+                midi_out.open_port(0)
+                print(f"[MIDI] Opened port: {ports[0]}")
+            else:
+                # No ports available — create a virtual one anyway (some drivers support it)
+                try:
+                    midi_out.open_virtual_port(name)
+                    print(f"[MIDI] Virtual port '{name}' opened (Windows fallback).")
+                except Exception:
+                    print("[MIDI] No MIDI output ports found and virtual port not supported.")
+                    print("[MIDI] Install a virtual MIDI driver like 'loopMIDI' for Windows MIDI output.")
+                    raise RuntimeError("No MIDI ports available")
+        else:
+            # macOS / Linux — use virtual port
+            midi_out.open_virtual_port(name)
+            print(f"[MIDI] Virtual port '{name}' opened.")
 
     def note_on(self, note: int, velocity: int = 127, channel: int = 0):
         """Send MIDI note_on message."""

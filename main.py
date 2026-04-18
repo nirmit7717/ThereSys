@@ -14,7 +14,7 @@ import mediapipe as mp
 
 from config import (
     CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT, TARGET_FPS,
-    DEFAULT_WAVEFORM, LATENCY_LOG_ENABLED,
+    DEFAULT_WAVEFORM, LATENCY_LOG_ENABLED, LATENCY_LOG_INTERVAL,
 )
 
 from vision.camera import Camera
